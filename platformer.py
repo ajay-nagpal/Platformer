@@ -84,7 +84,60 @@ class World():
         for block in self.block_list:
             screen.blit(block[0],block[1])
 
+class Player():
+    def __init__(self,x,y):
+        img=pygame.image.load('img/guy1.png')
+        self.image=pygame.transform.scale(img,(30,60))
+        self.rect=self.image.get_rect()
+        self.rect.x=x
+        self.rect.y=y
+
+        self.vel_y=0#for jump
+        self.jumped=False
+
+    def update(self):
+
+        #get key presses
+        #we will calculate nplayer next position based on whether we can move there or ot 
+        # rather than directly going there, as movign is fast ordinary collision detection is bit normal
+        #so wew will cehck collision then update player's positon
+        dx=0
+        dy=0
+        key=pygame.key.get_pressed()
+        if key[pygame.K_SPACE] and not self.jumped:
+            self.vel_y=-15#up
+            self.jumped=True
+        #release space key
+        if not key[pygame.K_SPACE]:
+            self.jumped=False
+
+        if key[pygame.K_LEFT]:
+            dx-=5
+        if key[pygame.K_RIGHT]:
+            dx+=5
+
+        #add gravity
+        self.vel_y+=1
+        if self.vel_y>10:
+            self.vel_y=10
+        dy+=self.vel_y
+
+        #check for collision
+
+        #update player's position
+        self.rect.x+=dx
+        self.rect.y+=dy
+
+        if self.rect.bottom>SCREEN_HEIGHT:
+            self.rect.bottom=SCREEN_HEIGHT
+            dy=0
+
+        #draw player on screen
+        screen.blit(self.image,self.rect)
+
+
 world=World(world_data)
+player=Player(100,SCREEN_HEIGHT-(BLOCK_SIZE+60))#player height
 
 run=True
 while run:
@@ -92,6 +145,7 @@ while run:
     screen.blit(sun_img,(80,80))
 
     world.draw()
+    player.update()
 
     for event in pygame.event.get():
         if event.type==pygame.QUIT:
