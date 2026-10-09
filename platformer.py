@@ -6,6 +6,9 @@ SCREEN_HEIGHT=840
 #boundry block size 
 BLOCK_SIZE=42 #20*20
 
+clock = pygame.time.Clock()
+fps = 60
+
 screen=pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 pygame.display.set_caption("Platformer")
 
@@ -45,6 +48,7 @@ world_data = [
 
 class World():
     def __init__(self,data):
+        clock.tick(fps)
         #load block image
         self.block_list=[]
         blk_img=pygame.image.load('img/blk.png')
@@ -86,14 +90,32 @@ class World():
 
 class Player():
     def __init__(self,x,y):
-        img=pygame.image.load('img/guy1.png')
-        self.image=pygame.transform.scale(img,(30,60))
+
+        self.images_right=[]# list of images to animate for right movement
+        self.images_left=[]# list of images to animate for left movement
+        self.index=0# list index
+
+        #counter to control animation rate at which it cycle through
+        self.counter=0
+
+        for num in range(1, 5):
+            img_right = pygame.image.load(f'img/guy{num}.png')
+            img_right=pygame.transform.scale(img_right,(30,60))
+            self.images_right.append(img_right)
+
+            img_left=pygame.transform.flip(img_right,True,False) #flip on x axis, not y axis
+            self.images_left.append(img_left)
+
+        self.image=self.images_right[self.index]
+        self.mask = pygame.mask.from_surface(self.image)
+        
         self.rect=self.image.get_rect()
         self.rect.x=x
         self.rect.y=y
 
         self.vel_y=0#for jump
         self.jumped=False
+        self.direction=0#1:right, -1:left
 
     def update(self):
 
@@ -103,6 +125,8 @@ class Player():
         #so wew will cehck collision then update player's positon
         dx=0
         dy=0
+        cooldown=20#20 iteration for animation
+
         key=pygame.key.get_pressed()
         if key[pygame.K_SPACE] and not self.jumped:
             self.vel_y=-15#up
@@ -112,10 +136,35 @@ class Player():
             self.jumped=False
 
         if key[pygame.K_LEFT]:
+            self.counter+=1
             dx-=5
+            self.direction=-1
         if key[pygame.K_RIGHT]:
+            self.counter+=1
             dx+=5
+            self.direction=1
 
+        #reset counter and index when no left right key pressed to get player straight position pic
+        if not key[pygame.K_LEFT] and not key[pygame.K_RIGHT]:
+            self.counter=0
+            self.index=0
+            if self.direction==1:
+                self.image=self.images_right[self.index]
+            if self.direction==-1:
+                self.image=self.images_left[self.index]
+
+        #handle animation 
+        if self.counter>cooldown:
+            self.counter=0
+            self.index+=1
+            if self.index>=len(self.images_right):
+                self.index=0
+            if self.direction==1:
+                self.image=self.images_right[self.index]
+            if self.direction==-1:
+                self.image=self.images_left[self.index]
+
+            # what wehn going left, need to flip image on x axis then move adn repeat above step
         #add gravity
         self.vel_y+=1
         if self.vel_y>10:
