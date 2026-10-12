@@ -81,12 +81,34 @@ class World():
                     block=(img,img_rect)
                     self.block_list.append(block)
 
+                if col==3:#enemy
+                    enemy=Enemy(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE+6)
+                    enemy_group.add(enemy)
+
                 col_counter+=1
             row_counter+=1
 
     def draw(self):
         for block in self.block_list:
             screen.blit(block[0],block[1])
+
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self,x,y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image=pygame.image.load('img/enemy.png')
+        self.rect=self.image.get_rect()
+        self.rect.x=x
+        self.rect.y=y
+        self.move_direction=1#1:right, -1:left
+        self.move_counter=0
+
+    def update(self):
+        #move enemy left and right
+        self.rect.x+=self.move_direction
+        self.move_counter+=1
+        if abs(self.move_counter)>50:
+            self.move_direction*=-1#change direction
+            self.move_counter*=-1#reset counter
 
 class Player():
     def __init__(self,x,y):
@@ -208,6 +230,8 @@ class Player():
         screen.blit(self.image,self.rect)
 
 
+enemy_group=pygame.sprite.Group()
+#create enemy group befor creating world, so that we can add enemy to this group when creating world
 world=World(world_data)
 player=Player(100,SCREEN_HEIGHT-(BLOCK_SIZE+60))#player height
 
@@ -217,6 +241,8 @@ while run:
     screen.blit(sun_img,(80,80))
 
     world.draw()
+    enemy_group.update()
+    enemy_group.draw(screen)
     player.update()
 
     for event in pygame.event.get():
