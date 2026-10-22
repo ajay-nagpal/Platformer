@@ -127,34 +127,7 @@ class Lava(pygame.sprite.Sprite):
 
 class Player():
     def __init__(self,x,y):
-        self.images_right=[]# list of images to animate for right movement
-        self.images_left=[]# list of images to animate for left movement
-        self.index=0# list index
-
-        #counter to control animation rate at which it cycle through
-        self.counter=0
-
-        for num in range(1, 5):
-            img_right = pygame.image.load(f'img/guy{num}.png')
-            img_right=pygame.transform.scale(img_right,(30,60))
-            self.images_right.append(img_right)
-
-            img_left=pygame.transform.flip(img_right,True,False) #flip on x axis, not y axis
-            self.images_left.append(img_left)
-
-        self.dead_image=pygame.image.load('img/ghost.png')
-        self.image=self.images_right[self.index]
-        self.mask = pygame.mask.from_surface(self.image)
-        
-        self.rect=self.image.get_rect()
-        self.rect.x=x
-        self.rect.y=y
-        self.width=self.image.get_width()
-        self.height=self.image.get_height()
-
-        self.vel_y=0#for jump
-        self.jumped=False
-        self.direction=0#1:right, -1:left
+        self.reset(x,y)
 
     def update(self):
 
@@ -169,7 +142,7 @@ class Player():
         global game_over
         if game_over==0:
             key=pygame.key.get_pressed()
-            if key[pygame.K_SPACE] and not self.jumped:
+            if key[pygame.K_SPACE] and not self.jumped and not self.in_air:
                 self.vel_y=-15#up
                 self.jumped=True
             #release space key
@@ -213,6 +186,7 @@ class Player():
             dy+=self.vel_y
 
             #check for collision
+            self.in_air=True#assume player is in air, if we find collision then we will set it to false
             for block in world.block_list:
                 #check for collision in x direction, can be on a block, but can move y dir
                 if block[1].colliderect(self.rect.x+dx,self.rect.y,self.width,self.height):
@@ -232,6 +206,7 @@ class Player():
                     elif self.vel_y>=0:#falling
                         dy=block[1].top-self.rect.bottom# distance allowed to move, emasn will stop at block top, so player can stand on block
                         self.vel_y=0#stop falling #hit ground
+                        self.in_air=False#player is on ground, so can jump again
 
             #check for collision with enemies or lava 
             if pygame.sprite.spritecollide(self,enemy_group,False) \
@@ -249,11 +224,75 @@ class Player():
         #draw player on screen
         screen.blit(self.image,self.rect)
 
+    def reset(self,x,y):
+        self.images_right=[]# list of images to animate for right movement
+        self.images_left=[]# list of images to animate for left movement
+        self.index=0# list index
+
+        #counter to control animation rate at which it cycle through
+        self.counter=0
+
+        for num in range(1, 5):
+            img_right = pygame.image.load(f'img/guy{num}.png')
+            img_right=pygame.transform.scale(img_right,(30,60))
+            self.images_right.append(img_right)
+
+            img_left=pygame.transform.flip(img_right,True,False) #flip on x axis, not y axis
+            self.images_left.append(img_left)
+
+        self.dead_image=pygame.image.load('img/ghost.png')
+        self.image=self.images_right[self.index]
+        self.mask = pygame.mask.from_surface(self.image)
+        
+        self.rect=self.image.get_rect()
+        self.rect.x=x
+        self.rect.y=y
+        self.width=self.image.get_width()
+        self.height=self.image.get_height()
+
+        self.vel_y=0#for jump
+        self.jumped=False
+        self.direction=0#1:right, -1:left
+
+        self.in_air=True#to check whether player is in air or on ground, so that we can jump only when on ground
+
+
+class Button:
+    def __init__(self, x, y, image):
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.clicked = False
+
+    def draw(self):
+
+        action=False
+        #get mouse position
+        pos=pygame.mouse.get_pos()#it gives x,y coordinate of mouse pointer
+        #check if mouse is over button and clicked
+        if self.rect.collidepoint(pos):
+            if pygame.mouse.get_pressed()[0]==1 and not self.clicked:#left click
+                self.clicked=True
+                action= True
+            # if mouse button is released, reset clicked state
+            if pygame.mouse.get_pressed()[0]==0:
+                #reset clicked state
+                self.clicked=False
+        
+        #draw button on screen
+        screen.blit(self.image, self.rect)
+        return action
+
 enemy_group=pygame.sprite.Group()
 lava_group=pygame.sprite.Group()
 #create enemy group befor creating world, so that we can add enemy to this group when creating world
 world=World(world_data)
 player=Player(100,SCREEN_HEIGHT-(BLOCK_SIZE+60))#player height
+
+#buttons
+restart_img=pygame.image.load('img/restart_btn.png')
+restart_button=Button(SCREEN_WIDTH//2-50,SCREEN_HEIGHT//2-100,restart_img)
 
 run=True
 while run:
@@ -264,6 +303,10 @@ while run:
     
     if not game_over:
         enemy_group.update()
+    else:
+        if restart_button.draw():
+            player.reset(100, SCREEN_HEIGHT - (BLOCK_SIZE + 60))
+            game_over=0
     
     player.update()
 
