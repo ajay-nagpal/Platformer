@@ -1,15 +1,19 @@
-import pygame
+import pygame, json
+from os import path
 
 SCREEN_WIDTH=840
 SCREEN_HEIGHT=840
 
 #boundry block size 
 BLOCK_SIZE=42 #20*20
+MAX_LEVELS=3
 
 clock = pygame.time.Clock()
 fps = 60
 
 game_over=0
+main_menu=True#for main menu 
+level=1
 
 screen=pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 pygame.display.set_caption("Platformer")
@@ -17,36 +21,13 @@ pygame.display.set_caption("Platformer")
 #load images
 sun_img=pygame.image.load('img/sun.png')
 bg_img=pygame.image.load('img/sky.png')
+restart_img=pygame.image.load('img/restart_btn.png')
+start_img=pygame.image.load('img/start_btn.png')
+exit_img=pygame.image.load('img/exit_btn.png')
 
 bg_img = pygame.transform.scale(
     bg_img, (SCREEN_WIDTH, SCREEN_HEIGHT)
 )
-
-#assume  complete screen as 20*20 matrix
-#we want block boundry, no passthrough[1]
-#grass block [2]
-world_data = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 1],
-    [1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 2, 2, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 7, 0, 5, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 1],
-    [1, 7, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 7, 0, 0, 0, 0, 0, 1],
-    [1, 0, 2, 0, 0, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 2, 0, 0, 4, 0, 0, 0, 3, 0, 0, 3, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 7, 0, 0, 0, 0, 2, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 2, 2, 2, 2, 2, 1],
-    [1, 0, 0, 0, 0, 2, 2, 2, 6, 6, 6, 6, 6, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-]
 
 class World():
     def __init__(self,data):
@@ -91,6 +72,10 @@ class World():
                     lava=Lava(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE+BLOCK_SIZE//2)
                     lava_group.add(lava)
 
+                if col==8:#exit
+                    exit=Exit(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE-(BLOCK_SIZE//2))
+                    exit_group.add(exit)
+
                 col_counter+=1
             row_counter+=1
 
@@ -121,6 +106,43 @@ class Lava(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         img=pygame.image.load('img/lava.png')
         self.image=pygame.transform.scale(img,(BLOCK_SIZE,BLOCK_SIZE//2))
+        self.rect=self.image.get_rect()
+        self.rect.x=x
+        self.rect.y=y
+
+class Button:
+    def __init__(self, x, y, image):
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.clicked = False
+
+    def draw(self):
+
+        action=False
+        #get mouse position
+        pos=pygame.mouse.get_pos()#it gives x,y coordinate of mouse pointer
+        #check if mouse is over button and clicked
+        if self.rect.collidepoint(pos):
+            if pygame.mouse.get_pressed()[0]==1 and not self.clicked:#left click
+                self.clicked=True
+                action= True
+            # if mouse button is released, reset clicked state
+            if pygame.mouse.get_pressed()[0]==0:
+                #reset clicked state
+                self.clicked=False
+        
+        #draw button on screen
+        screen.blit(self.image, self.rect)
+        return action
+
+#exit gate for level completion
+class Exit(pygame.sprite.Sprite):
+    def __init__(self,x,y):
+        pygame.sprite.Sprite.__init__(self)
+        img=pygame.image.load('img/exit.png')
+        self.image=pygame.transform.scale(img,(BLOCK_SIZE,BLOCK_SIZE*1.5))
         self.rect=self.image.get_rect()
         self.rect.x=x
         self.rect.y=y
@@ -212,6 +234,10 @@ class Player():
             if pygame.sprite.spritecollide(self,enemy_group,False) \
                 or pygame.sprite.spritecollide(self,lava_group,False):#do kill false
                 game_over=1#player dies
+
+            #check for collision with exit
+            if pygame.sprite.spritecollide(self,exit_group,False):
+                game_over=-1#level complete
         
         elif game_over==1:
             self.image=self.dead_image
@@ -256,62 +282,75 @@ class Player():
 
         self.in_air=True#to check whether player is in air or on ground, so that we can jump only when on ground
 
-
-class Button:
-    def __init__(self, x, y, image):
-        self.image = image
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.clicked = False
-
-    def draw(self):
-
-        action=False
-        #get mouse position
-        pos=pygame.mouse.get_pos()#it gives x,y coordinate of mouse pointer
-        #check if mouse is over button and clicked
-        if self.rect.collidepoint(pos):
-            if pygame.mouse.get_pressed()[0]==1 and not self.clicked:#left click
-                self.clicked=True
-                action= True
-            # if mouse button is released, reset clicked state
-            if pygame.mouse.get_pressed()[0]==0:
-                #reset clicked state
-                self.clicked=False
-        
-        #draw button on screen
-        screen.blit(self.image, self.rect)
-        return action
-
 enemy_group=pygame.sprite.Group()
 lava_group=pygame.sprite.Group()
-#create enemy group befor creating world, so that we can add enemy to this group when creating world
-world=World(world_data)
-player=Player(100,SCREEN_HEIGHT-(BLOCK_SIZE+60))#player height
+exit_group=pygame.sprite.Group()
+
+def reset_level(level):
+    player.reset(BLOCK_SIZE,SCREEN_HEIGHT-(BLOCK_SIZE+60))
+    enemy_group.empty()#empty all groups
+    lava_group.empty()
+    exit_group.empty()
+
+    #create enemy group befor creating world, so that we can add enemy to this group when creating world
+    #load thte world data from file
+    if path.exists(f'levels/level{level}_data.json'):
+        with open(f'levels/level{level}_data.json', 'r') as f:
+            world_data = json.load(f)
+    world=World(world_data)
+    
+    return world
+
+
+player=Player(BLOCK_SIZE,SCREEN_HEIGHT-(BLOCK_SIZE+60))#player height
+world=reset_level(level)
+
 
 #buttons
-restart_img=pygame.image.load('img/restart_btn.png')
 restart_button=Button(SCREEN_WIDTH//2-50,SCREEN_HEIGHT//2-100,restart_img)
+
+start_button=Button(SCREEN_WIDTH//2-250,SCREEN_HEIGHT//2-100,start_img)
+exit_button=Button(SCREEN_WIDTH//2+50,SCREEN_HEIGHT//2-100,exit_img)
 
 run=True
 while run:
     screen.blit(bg_img,(0,0))
     screen.blit(sun_img,(80,80))
 
-    world.draw()
-    
-    if not game_over:
-        enemy_group.update()
+    if main_menu:
+        if start_button.draw():
+            main_menu=False
+        if exit_button.draw():
+            run=False
     else:
-        if restart_button.draw():
-            player.reset(100, SCREEN_HEIGHT - (BLOCK_SIZE + 60))
-            game_over=0
-    
-    player.update()
+        if not game_over:
+            enemy_group.update()
+        elif game_over==1:
+            if restart_button.draw():
+                world_data=[]#reset world data
+                world=reset_level(level)                
+                game_over=0
+        elif game_over==-1:
+            #level complete, we can show level complete screen or go to next level
+            #reset the game nthen next level
+            level+=1
+            if level<=MAX_LEVELS:
+                world_data=[]#reset world data
+                world=reset_level(level)
+                game_over=0
+            else:
+                if restart_button.draw():
+                    level=1
+                    world_data=[]#reset world data
+                    world=reset_level(level)
+                    game_over=0
 
-    enemy_group.draw(screen)
-    lava_group.draw(screen)
+        world.draw()
+        player.update()
+        exit_group.draw(screen)
+
+        enemy_group.draw(screen)
+        lava_group.draw(screen)
 
     for event in pygame.event.get():
         if event.type==pygame.QUIT:
