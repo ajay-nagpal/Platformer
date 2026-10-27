@@ -1,6 +1,7 @@
 import pygame, json
 from os import path
 
+pygame.mixer.init()
 pygame.init()
 
 SCREEN_WIDTH=840
@@ -37,6 +38,18 @@ exit_img=pygame.image.load('img/exit_btn.png')
 bg_img = pygame.transform.scale(
     bg_img, (SCREEN_WIDTH, SCREEN_HEIGHT)
 )
+
+#load sounds
+game_over_sound=pygame.mixer.Sound('img/game_over.wav')
+jump_sound=pygame.mixer.Sound('img/jump.wav')
+coin_sound=pygame.mixer.Sound('img/coin.wav')
+
+pygame.mixer.music.load('img/music.wav')
+pygame.mixer.music.play(-1,0.0,5000)#-1 means loop, 0.0 is start time, 5000 is fade in time
+
+jump_sound.set_volume(0.2)
+coin_sound.set_volume(0.2)
+game_over_sound.set_volume(0.5)
 
 class World():
     def __init__(self,data):
@@ -77,6 +90,14 @@ class World():
                     enemy=Enemy(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE+6)
                     enemy_group.add(enemy)
 
+                if col==4:#platform left right
+                    platform=Platform(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE,1,0)
+                    platform_group.add(platform)
+
+                if col==5:#platform up down
+                    platform=Platform(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE,0,1)
+                    platform_group.add(platform)
+
                 if col==6:#lava
                     lava=Lava(col_counter*BLOCK_SIZE,row_counter*BLOCK_SIZE+BLOCK_SIZE//2)
                     lava_group.add(lava)
@@ -109,6 +130,30 @@ class Enemy(pygame.sprite.Sprite):
     def update(self):
         #move enemy left and right
         self.rect.x+=self.move_direction
+        self.move_counter+=1
+        if abs(self.move_counter)>50:
+            self.move_direction*=-1#change direction
+            self.move_counter*=-1#reset counter
+
+class Platform(pygame.sprite.Sprite):
+    def __init__(self,x,y,move_x, move_y):
+        pygame.sprite.Sprite.__init__(self)
+        img=pygame.image.load('img/platform.png')
+        self.image=pygame.transform.scale(img,(BLOCK_SIZE,BLOCK_SIZE//2))
+        self.rect=self.image.get_rect()
+        self.rect.x=x
+        self.rect.y=y
+        self.move_direction=1#1:right, -1:left
+        self.move_counter=0
+
+        self.move_x=move_x
+        self.move_y=move_y
+
+    def update(self):
+        #move left and right
+        self.rect.x+=self.move_direction*self.move_x
+        self.rect.y+=self.move_direction*self.move_y
+
         self.move_counter+=1
         if abs(self.move_counter)>50:
             self.move_direction*=-1#change direction
@@ -181,11 +226,14 @@ class Player():
         dx=0
         dy=0
         cooldown=20#20 iteration for animation
+        #collision threshhold
+        col_thresh=20#20 pixel threshold for collision detection, if player is within 20 pixel of block then we will consider it as collision
         
         global game_over
         if game_over==0:
             key=pygame.key.get_pressed()
             if key[pygame.K_SPACE] and not self.jumped and not self.in_air:
+                jump_sound.play()
                 self.vel_y=-15#up
                 self.jumped=True
             #release space key
@@ -255,6 +303,7 @@ class Player():
             if pygame.sprite.spritecollide(self,enemy_group,False) \
                 or pygame.sprite.spritecollide(self,lava_group,False):#do kill false
                 game_over=1#player dies
+                game_over_sound.play()
 
             #check for collision with exit
             if pygame.sprite.spritecollide(self,exit_group,False):
@@ -265,7 +314,33 @@ class Player():
             if coin_collisions:
                 global score
                 score+=1
-        
+                coin_sound.play()
+
+            #check for collision with moving platforms
+            for platform in platform_group:
+                #check collision in x and y direction
+                #cehck same way using dx and dy , before moving player
+
+                if platform.rect.colliderect(self.rect.x+dx,self.rect.y,self.width,self.height):
+                    dx=0#stop moving in x direction, but can move in y direction
+                if platform.rect.colliderect(self.rect.x,self.rect.y+dy,self.width,self.height):
+                    #whether it is from above or below the platform, if above then stop falling, if below then stop going up
+                    #check if below platform
+                    if abs((self.rect.top+dy) -platform.rect.bottom)<col_thresh:#jumping
+                        self.vel_y=0#hit head of platform, so stop going up
+                        dy=platform.rect.bottom-self.rect.top#head dont go out, it bump head
+
+                    #check if above platform
+                    elif abs((self.rect.bottom+dy) -platform.rect.top)<col_thresh:#falling
+                        self.rect.bottom=platform.rect.top#player bottom is on platform top
+                        self.in_air=False#player is on ground, so can jump again
+                        dy=0#stop falling
+                    #move with platform movment automatically
+                    #because gravity pulling him down, it will fall if platform move
+                    if platform.move_x!=0:#moving left right
+                        self.rect.x+=platform.move_direction
+
+                        
         elif game_over==1:
             self.image=self.dead_image
             self.rect.y-=5#move up to show player is dead
@@ -313,12 +388,15 @@ enemy_group=pygame.sprite.Group()
 lava_group=pygame.sprite.Group()
 exit_group=pygame.sprite.Group()
 coin_group=pygame.sprite.Group()
+platform_group=pygame.sprite.Group()
 
 def reset_level(level):
     player.reset(BLOCK_SIZE,SCREEN_HEIGHT-(BLOCK_SIZE+60))
     enemy_group.empty()#empty all groups
     lava_group.empty()
     exit_group.empty()
+    platform_group.empty()
+    coin_group.empty()
 
     #create enemy group befor creating world, so that we can add enemy to this group when creating world
     #load thte world data from file
@@ -356,6 +434,8 @@ while run:
     else:
         if not game_over:
             enemy_group.update()
+            platform_group.update()
+
         elif game_over==1:
             draw_text('GAME OVER!',font_general,white,(SCREEN_WIDTH//2)-200,SCREEN_HEIGHT//2)
             if restart_button.draw():
@@ -363,6 +443,7 @@ while run:
                 world=reset_level(level)                
                 game_over=0
                 score=0
+                level=1
         elif game_over==-1:
             #level complete, we can show level complete screen or go to next level
             #reset the game nthen next level
@@ -387,6 +468,7 @@ while run:
         enemy_group.draw(screen)
         lava_group.draw(screen)
         coin_group.draw(screen)
+        platform_group.draw(screen)
 
         draw_text('$¢or€:   '+str(score),font_score,white,BLOCK_SIZE-5,10)
 
